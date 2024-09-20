@@ -1,107 +1,121 @@
-import warnings
-from diffusers import DiffusionPipeline, StableDiffusionXLImg2ImgPipeline
-import torch
-from PIL import Image
-import matplotlib.pyplot as plt
+#Adds UI
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox
+from diffusers import DiffusionPipeline
+import torch
+from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+import warnings
+import threading
 
 warnings.filterwarnings("ignore", message="Accessing config attribute `vae_latent_channels` directly via 'VaeImageProcessor' object attribute is deprecated.")
 
-# Load base model
-base = DiffusionPipeline.from_pretrained(
-    "stabilityai/stable-diffusion-xl-base-1.0"
-)
-base.to("cpu")
+class StableDiffusionGUI:
+    def __init__(self, master):
+        self.master = master
+        master.title("Stable Diffusion Image Generator")
+        master.geometry("600x600")
 
-# Function to get user input
-def get_user_input():
-    use_image = input("Do you want to use an image as a reference? (yes/no): ").lower().strip() == 'yes'
-    prompt = input("Enter your prompt: ")
-    num_images = int(input("Number of images to generate: "))
-    return use_image, prompt, num_images
+        self.prompt_label = ttk.Label(master, text="Prompt:")
+        self.prompt_label.pack(pady=5)
 
-# Function to load image
-def load_image():
-    root = tk.Tk()
-    root.withdraw()
-    file_path = filedialog.askopenfilename(title="Select image file", filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
-    if file_path:
-        return Image.open(file_path)
-    return None
+        self.prompt_entry = ttk.Entry(master, width=50)
+        self.prompt_entry.pack(pady=5)
 
-# Get user input
-use_image, prompt, num_images_per_prompt = get_user_input()
+        self.generate_button = ttk.Button(master, text="Generate Image", command=self.generate_image)
+        self.generate_button.pack(pady=10)
 
-# Load image if user chose to use one
-init_image = None
-if use_image:
-    init_image = load_image()
-    if init_image is None:
-        print("No image selected. Proceeding with text-to-image generation.")
-        use_image = False
+        self.status_label = ttk.Label(master, text="")
+        self.status_label.pack(pady=5)
 
-# Set up the appropriate pipeline
-if use_image:
-    pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-refiner-1.0",
-        text_encoder_2=base.text_encoder_2,
-        vae=base.vae
-    )
-else:
-    pipe = base
+        self.image_label = ttk.Label(master)
+        self.image_label.pack(pady=10)
 
-pipe.to("cpu")
+        self.save_button = ttk.Button(master, text="Save Image", command=self.save_image, state=tk.DISABLED)
+        self.save_button.pack(pady=5)
 
-print("Generating images... This may take a while.")
+        self.base = None
+        self.refiner = None
+        self.generated_image = None
 
-# Generate images
-if use_image:
-    images = pipe(
-        prompt=prompt,
-        image=init_image,
-        num_images_per_prompt=num_images_per_prompt
-    ).images
-else:
-    images = pipe(
-        prompt=prompt,
-        num_inference_steps=40,
-        denoising_end=0.8,
-        output_type="pil",
-        num_images_per_prompt=num_images_per_prompt
-    ).images
+    def load_models(self):
+        self.status_label.config(text="Loading models...")
+        self.master.update()
 
-print("Images generated successfully!")
+        self.base = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0")
+        self.base.to("cpu")
 
-# Display the images
-fig, axes = plt.subplots(1, num_images_per_prompt, figsize=(20, 5))
-for i, image in enumerate(images):
-    if num_images_per_prompt > 1:
-        axes[i].imshow(image)
-        axes[i].axis('off')
-    else:
-        axes.imshow(image)
-        axes.axis('off')
-plt.tight_layout()
-plt.show()
+        self.refiner = DiffusionPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-refiner-1.0",
+            text_encoder_2=self.base.text_encoder_2,
+            vae=self.base.vae
+        )
+        self.refiner.to("cpu")
 
-# Create a simple tkinter window for the dialogs
+        self.status_label.config(text="Models loaded successfully!")
+        self.generate_button.config(state=tk.NORMAL)
+
+    def generate_image(self):
+        if not self.base or not self.refiner:
+            self.generate_button.config(state=tk.DISABLED)
+            threading.Thread(target=self.load_models, daemon=True).start()
+            return
+
+        prompt = self.prompt_entry.get()
+        if not prompt:
+            messagebox.showerror("Error", "Please enter a prompt.")
+            return
+
+        self.status_label.config(text="Generating image...")
+        self.generate_button.config(state=tk.DISABLED)
+        self.master.update()
+
+        def generate():
+            n_steps = 40
+            high_noise_frac = 0.8
+
+            latents = self.base(
+                prompt=prompt,
+                num_inference_steps=n_steps,
+                denoising_end=high_noise_frac,
+                output_type="latent",
+                num_images_per_prompt=1
+            ).images
+
+            images = self.refiner(
+                prompt=prompt,
+                num_inference_steps=n_steps,
+                denoising_start=high_noise_frac,
+                image=latents,
+                num_images_per_prompt=1
+            ).images
+
+            self.generated_image = images[0]
+            self.master.after(0, self.update_gui)
+
+        threading.Thread(target=generate, daemon=True).start()
+
+    def update_gui(self):
+        self.display_image(self.generated_image)
+        self.status_label.config(text="Image generated successfully!")
+        self.save_button.config(state=tk.NORMAL)
+        self.generate_button.config(state=tk.NORMAL)
+
+    def display_image(self, image):
+        image = image.resize((300, 300))
+        photo = ImageTk.PhotoImage(image)
+        self.image_label.config(image=photo)
+        self.image_label.image = photo
+
+    def save_image(self):
+        if self.generated_image:
+            file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+            if file_path:
+                self.generated_image.save(file_path)
+                messagebox.showinfo("Save Complete", f"Image saved to: {file_path}")
+        else:
+            messagebox.showerror("Error", "No image to save.")
+
 root = tk.Tk()
-root.withdraw()  # Hide the main window
-
-# Show a confirmation dialog
-if messagebox.askyesno("Save Images", "Do you want to save these images?"):
-    # If user clicks "Yes", open the folder selection dialog
-    folder_path = filedialog.askdirectory(title="Select folder to save images")
-    if folder_path:
-        for i, image in enumerate(images):
-            file_path = f"{folder_path}/image_{i+1}.png"
-            image.save(file_path)
-        print(f"Images saved to: {folder_path}")
-        messagebox.showinfo("Save Complete", f"Images saved to: {folder_path}")
-    else:
-        print("Save cancelled")
-else:
-    print("Images not saved")
-
-root.destroy()  # Close the tkinter window
+app = StableDiffusionGUI(root)
+root.mainloop()
