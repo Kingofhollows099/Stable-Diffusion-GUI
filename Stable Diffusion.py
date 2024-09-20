@@ -13,10 +13,15 @@ class CropWindow(tk.Toplevel):
         self.target_size = target_size
         self.cropped_image = None
 
-        self.canvas = tk.Canvas(self, width=600, height=600)
+        # Calculate the scaling factor to fit the image within 600x600
+        scale = min(600 / self.image.width, 600 / self.image.height)
+        self.display_width = int(self.image.width * scale)
+        self.display_height = int(self.image.height * scale)
+
+        self.canvas = tk.Canvas(self, width=self.display_width, height=self.display_height)
         self.canvas.pack()
 
-        self.display_image = ImageTk.PhotoImage(self.image.resize((600, 600), Image.LANCZOS))
+        self.display_image = ImageTk.PhotoImage(self.image.resize((self.display_width, self.display_height), Image.LANCZOS))
         self.canvas.create_image(0, 0, anchor="nw", image=self.display_image)
 
         self.crop_rect = self.canvas.create_rectangle(0, 0, 0, 0, outline="red")
@@ -175,16 +180,16 @@ class StableDiffusionGUI:
             high_noise_frac = 0.8
 
             def base_callback(step, timestep, latents):
-                progress = (step / n_steps) * 50
+                progress = (step / n_steps) * 100 * high_noise_frac
                 self.master.after(0, self.update_progress, progress)
 
             def refiner_callback(step, timestep, latents):
-                progress = 50 + (step / n_steps) * 50
+                progress = 100 * high_noise_frac + (step / n_steps) * 100 * (1 - high_noise_frac)
                 self.master.after(0, self.update_progress, progress)
 
             if self.reference_images:
-                references = [self.base.image_processor.preprocess(img) for img in self.reference_images]
-                reference = torch.cat(references, dim=0)
+                reference = self.reference_images[0].resize((1024, 1024))
+                reference = self.base.image_processor.preprocess(reference)
             else:
                 reference = None
 
@@ -195,7 +200,8 @@ class StableDiffusionGUI:
                 output_type="latent",
                 callback=base_callback,
                 callback_steps=1,
-                image=reference
+                image=reference,
+                strength=0.7  # Adjust this value to control the influence of the reference image
             ).images
 
             images = self.refiner(
@@ -221,7 +227,7 @@ class StableDiffusionGUI:
         self.display_image(self.generated_image, self.image_label)
         self.status_label.config(text="Image generated successfully!")
         self.generate_button.config(state=tk.NORMAL)
-        self.save_button.config(state=tk.NORMAL)  # Enable the save button
+        self.save_button.config(state=tk.NORMAL)
         self.progress_bar['value'] = 100
         self.progress_label.config(text="100%")
 
