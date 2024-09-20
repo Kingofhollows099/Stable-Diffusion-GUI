@@ -9,3 +9,5 @@ Use:
     You can select a referance image that the AI will use to help make the picture be clicked "Add referance image". There is no limit on how many you can add.
     You can type your prompt in the labeled text entry bar.
     Once ready, click "Generate Image"
+
+Link to Stable Diffusion website: https://stablediffusionxl.com/
