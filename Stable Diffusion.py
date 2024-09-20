@@ -87,15 +87,16 @@ class StableDiffusionGUI:
         self.status_label = ttk.Label(left_frame, text="")
         self.status_label.pack(pady=5)
 
-        self.save_button = ttk.Button(left_frame, text="Save Image", command=self.save_image, state=tk.DISABLED)
-        self.save_button.pack(pady=10)
-
-        # Right frame for generated image
+        # Right frame for generated image and save button
         right_frame = ttk.Frame(master)
         right_frame.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         self.image_label = ttk.Label(right_frame)
         self.image_label.pack(pady=10, fill=tk.BOTH, expand=True)
+
+        # New save button in the right frame
+        self.save_button = ttk.Button(right_frame, text="Save Generated Image", command=self.save_image, state=tk.DISABLED)
+        self.save_button.pack(pady=10, side=tk.BOTTOM)
 
         self.base = None
         self.refiner = None
@@ -220,7 +221,7 @@ class StableDiffusionGUI:
         self.display_image(self.generated_image, self.image_label)
         self.status_label.config(text="Image generated successfully!")
         self.generate_button.config(state=tk.NORMAL)
-        self.save_button.config(state=tk.NORMAL)
+        self.save_button.config(state=tk.NORMAL)  # Enable the save button
         self.progress_bar['value'] = 100
         self.progress_label.config(text="100%")
 
@@ -238,6 +239,7 @@ class StableDiffusionGUI:
                 self.status_label.config(text=f"Image saved to: {file_path}")
         else:
             self.status_label.config(text="No image to save.")
+
 
 root = tk.Tk()
 app = StableDiffusionGUI(root)
