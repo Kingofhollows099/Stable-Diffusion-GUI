@@ -4,6 +4,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import warnings
 
 # Load both base & refiner
 base = DiffusionPipeline.from_pretrained(
@@ -22,40 +23,58 @@ refiner.to("cpu")
 n_steps = 40
 high_noise_frac = 0.8
 prompt = input("Prompt: ")
+num_images_per_prompt = 1
 
-# Define how many steps and what % of steps to be run on each experts (80/20) here
+print("Generating images... This may take a while.")
+
+# Generate multiple images
 latents = base(
     prompt=prompt,
     num_inference_steps=n_steps,
     denoising_end=high_noise_frac,
     output_type="latent",
-).images[0]
+    num_images_per_prompt=num_images_per_prompt
+).images
 
-image = refiner(
+images = refiner(
     prompt=prompt,
     num_inference_steps=n_steps,
     denoising_start=high_noise_frac,
     image=latents,
-).images[0]
+    num_images_per_prompt=num_images_per_prompt
+).images
 
-# Display the image
-plt.imshow(image)
-plt.axis('off')
+print("Images generated successfully!")
+
+# Display the images
+fig, axes = plt.subplots(1, num_images_per_prompt, figsize=(20, 5))
+for i, image in enumerate(images):
+    if num_images_per_prompt > 1:
+        axes[i].imshow(image)
+        axes[i].axis('off')
+    else:
+        axes.imshow(image)
+        axes.axis('off')
+plt.tight_layout()
 plt.show()
 
-# Create a simple tkinter window for the prompt
+# Create a simple tkinter window for the dialogs
 root = tk.Tk()
 root.withdraw()  # Hide the main window
 
 # Show a confirmation dialog
-if messagebox.askyesno("Save Image", "Do you want to save this image?"):
-    # If user clicks "Yes", open the file dialog
-    file_path = filedialog.asksaveasfilename(defaultextension=".png")
-    if file_path:
-        # Save the image
-        image.save(file_path)
-        print(f"Image saved to: {file_path}")
+if messagebox.askyesno("Save Images", "Do you want to save these images?"):
+    # If user clicks "Yes", open the folder selection dialog
+    folder_path = filedialog.askdirectory(title="Select folder to save images")
+    if folder_path:
+        for i, image in enumerate(images):
+            file_path = f"{folder_path}/image_{i+1}.png"
+            image.save(file_path)
+        print(f"Images saved to: {folder_path}")
+        messagebox.showinfo("Save Complete", f"Images saved to: {folder_path}")
     else:
         print("Save cancelled")
 else:
-    print("Image not saved")
+    print("Images not saved")
+
+root.destroy()  # Close the tkinter window
