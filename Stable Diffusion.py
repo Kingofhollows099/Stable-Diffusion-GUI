@@ -6,7 +6,20 @@ from PIL import Image, ImageTk
 import torch
 
 class CropWindow(tk.Toplevel):
+    """
+    A window for cropping an image to a specific size.
+
+    Parameters:
+        master (tkinter.Tk): The parent window.
+        image (PIL.Image): The image to be cropped.
+        target_size (tuple): The size to which the image should be cropped.
+    """
     def __init__(self, master, image, target_size=(512, 512)):
+        """
+        Initialize the CropWindow.
+
+        Calculates the scaling factor to fit the image within 600x600.
+        """
         super().__init__(master)
         self.title("Crop Image")
         self.image = image
@@ -30,14 +43,26 @@ class CropWindow(tk.Toplevel):
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
 
-        self.crop_button = ttk.Button(self, text="Crop", command=self.crop_image)
+        self.crop_button = ttk.Button(self, text="Crop", command=self.crop_image, state=tk.DISABLED)
         self.crop_button.pack(pady=10)
 
     def on_press(self, event):
+        """
+        Called when the user presses the left mouse button.
+
+        Saves the start coordinates of the crop rectangle.
+        """
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
+        self.crop_button.config(state=tk.DISABLED)
 
     def on_drag(self, event):
+        """
+        Called when the user drags the mouse while the left button is pressed.
+
+        Calculates the width and height of the crop rectangle and
+        updates its coordinates on the canvas.
+        """
         cur_x = self.canvas.canvasx(event.x)
         cur_y = self.canvas.canvasy(event.y)
 
@@ -50,16 +75,37 @@ class CropWindow(tk.Toplevel):
         self.canvas.coords(self.crop_rect, self.start_x, self.start_y, cur_x, self.start_y + height)
 
     def on_release(self, event):
-        pass
+        """
+        Called when the user releases the left mouse button.
+
+        Enables the crop button if the crop rectangle is not empty.
+        """
+        if self.canvas.coords(self.crop_rect) != (0, 0, 0, 0):
+            self.crop_button.config(state=tk.NORMAL)
 
     def crop_image(self):
+        """
+        Called when the user clicks the crop button.
+
+        Crops the image to the crop rectangle and closes the window.
+        """
         bbox = self.canvas.coords(self.crop_rect)
         x1, y1, x2, y2 = [int(coord * self.image.width / 600) for coord in bbox]
         self.cropped_image = self.image.crop((x1, y1, x2, y2)).resize(self.target_size, Image.LANCZOS)
         self.destroy()
 
 class StableDiffusionGUI:
+    """
+    The main GUI class for the Stable Diffusion image generator application.
+    """
+
     def __init__(self, master):
+        """
+        Initializes the GUI.
+
+        Creates the main window with two frames: one for controls and reference images
+        and another for the generated image and save button.
+        """
         self.master = master
         master.title("Stable Diffusion Image Generator")
         master.geometry("800x600")
@@ -109,6 +155,11 @@ class StableDiffusionGUI:
         self.reference_images = []
 
     def load_models(self):
+        """
+        Loads the Stable Diffusion models.
+
+        Loads the base model and refiner model into memory.
+        """
         self.status_label.config(text="Loading models...")
         self.master.update()
 
@@ -125,6 +176,12 @@ class StableDiffusionGUI:
         self.status_label.config(text="Models loaded successfully!")
 
     def add_reference_image(self):
+        """
+        Adds a reference image to the GUI.
+
+        Opens a file dialog to select an image file and then
+        displays it in the reference image frame.
+        """
         file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
         if file_path:
             original_image = Image.open(file_path).convert("RGB")
@@ -136,6 +193,11 @@ class StableDiffusionGUI:
                 self.status_label.config(text=f"{len(self.reference_images)} reference image(s) selected.")
 
     def display_reference_images(self):
+        """
+        Displays the reference images in the reference image frame.
+
+        Clears the frame and adds new labels for each reference image.
+        """
         for widget in self.reference_frame.winfo_children():
             widget.destroy()
 
@@ -160,6 +222,12 @@ class StableDiffusionGUI:
             label.grid(row=i//3, column=i%3, padx=5, pady=5)
 
     def generate_image(self):
+        """
+        Generates an image based on the prompt and reference images.
+
+        If the models are not loaded, loads them first.
+        Then generates the image using the base model and refiner model.
+        """
         if not self.base or not self.refiner:
             self.load_models()
 
@@ -219,11 +287,21 @@ class StableDiffusionGUI:
         threading.Thread(target=generate, daemon=True).start()
 
     def update_progress(self, progress):
+        """
+        Updates the progress bar and label.
+
+        Called by the generate function to update the progress bar and label.
+        """
         self.progress_bar['value'] = progress
         self.progress_label.config(text=f"{progress:.1f}%")
         self.master.update_idletasks()
 
     def update_gui(self):
+        """
+        Updates the GUI with the generated image.
+
+        Called by the generate function to update the GUI with the generated image.
+        """
         self.display_image(self.generated_image, self.image_label)
         self.status_label.config(text="Image generated successfully!")
         self.generate_button.config(state=tk.NORMAL)
@@ -232,12 +310,22 @@ class StableDiffusionGUI:
         self.progress_label.config(text="100%")
 
     def display_image(self, image, label):
+        """
+        Displays an image in a label.
+
+        Called by the update_gui function to display the generated image.
+        """
         image = image.resize((400, 400))  # Increased size for the generated image
         photo = ImageTk.PhotoImage(image)
         label.config(image=photo)
         label.image = photo
 
     def save_image(self):
+        """
+        Saves the generated image to a file.
+
+        Opens a file dialog to select a file and then saves the image to that file.
+        """
         if self.generated_image:
             file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
             if file_path:
