@@ -4,21 +4,26 @@ from diffusers import DiffusionPipeline
 import threading
 from PIL import Image, ImageTk
 import torch
+import imageSettings
 
 class CropWindow(tk.Toplevel):
     """
     A window for cropping an image to a specific size.
 
-    Parameters:
+    Attributes:
         master (tkinter.Tk): The parent window.
         image (PIL.Image): The image to be cropped.
         target_size (tuple): The size to which the image should be cropped.
     """
-    def __init__(self, master, image, target_size=(512, 512)):
-        """
-        Initialize the CropWindow.
 
-        Calculates the scaling factor to fit the image within 600x600.
+    def __init__(self, master, image, target_size=(imageSettings.image_width, imageSettings.image_height)):
+        """
+        Initializes the CropWindow.
+
+        Args:
+            master (tkinter.Tk): The parent window.
+            image (PIL.Image): The image to be cropped.
+            target_size (tuple, optional): The target size for cropping. Defaults to the imageSettings.
         """
         super().__init__(master)
         self.title("Crop Image")
@@ -39,6 +44,7 @@ class CropWindow(tk.Toplevel):
 
         self.crop_rect = self.canvas.create_rectangle(0, 0, 0, 0, outline="red")
 
+        # Bind mouse events for cropping
         self.canvas.bind("<ButtonPress-1>", self.on_press)
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
@@ -47,22 +53,13 @@ class CropWindow(tk.Toplevel):
         self.crop_button.pack(pady=10)
 
     def on_press(self, event):
-        """
-        Called when the user presses the left mouse button.
-
-        Saves the start coordinates of the crop rectangle.
-        """
+        """Handles mouse press event to start cropping."""
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
         self.crop_button.config(state=tk.DISABLED)
 
     def on_drag(self, event):
-        """
-        Called when the user drags the mouse while the left button is pressed.
-
-        Calculates the width and height of the crop rectangle and
-        updates its coordinates on the canvas.
-        """
+        """Handles mouse drag event to update the crop rectangle."""
         cur_x = self.canvas.canvasx(event.x)
         cur_y = self.canvas.canvasy(event.y)
 
@@ -75,36 +72,46 @@ class CropWindow(tk.Toplevel):
         self.canvas.coords(self.crop_rect, self.start_x, self.start_y, cur_x, self.start_y + height)
 
     def on_release(self, event):
-        """
-        Called when the user releases the left mouse button.
-
-        Enables the crop button if the crop rectangle is not empty.
-        """
+        """Handles mouse release event to enable the crop button if the crop rectangle is valid."""
         if self.canvas.coords(self.crop_rect) != (0, 0, 0, 0):
             self.crop_button.config(state=tk.NORMAL)
 
     def crop_image(self):
-        """
-        Called when the user clicks the crop button.
-
-        Crops the image to the crop rectangle and closes the window.
-        """
+        """Crops the image based on the defined rectangle and closes the window."""
         bbox = self.canvas.coords(self.crop_rect)
         x1, y1, x2, y2 = [int(coord * self.image.width / 600) for coord in bbox]
         self.cropped_image = self.image.crop((x1, y1, x2, y2)).resize(self.target_size, Image.LANCZOS)
         self.destroy()
 
+
 class StableDiffusionGUI:
     """
     The main GUI class for the Stable Diffusion image generator application.
+
+    Attributes:
+        master (tkinter.Tk): The main application window.
+        base (DiffusionPipeline): The base model for image generation.
+        refiner (DiffusionPipeline): The refiner model for image refinement.
+        generated_image (PIL.Image): The generated image.
+        reference_images (list): List of reference images.
     """
+
+    def open_settings(self):
+        """Opens a new settings window when the settings button is clicked."""
+        settings_window = tk.Toplevel(self.master)
+        settings_window.title("Settings")
+        settings_window.geometry("400x200")
+        settings_window.resizable(False, False)
+
+        # Placeholder for settings content
+        ttk.Label(settings_window, text="Settings will be added here.").pack(pady=20)
 
     def __init__(self, master):
         """
-        Initializes the GUI.
+        Initializes the main GUI.
 
-        Creates the main window with two frames: one for controls and reference images
-        and another for the generated image and save button.
+        Args:
+            master (tkinter.Tk): The main application window.
         """
         self.master = master
         master.title("Stable Diffusion Image Generator")
@@ -145,9 +152,13 @@ class StableDiffusionGUI:
         self.image_label = ttk.Label(right_frame)
         self.image_label.pack(pady=10, fill=tk.BOTH, expand=True)
 
-        # New save button in the right frame
+        # Save button in the right frame
         self.save_button = ttk.Button(right_frame, text="Save Generated Image", command=self.save_image, state=tk.DISABLED)
         self.save_button.pack(pady=10, side=tk.BOTTOM)
+
+        # Settings button
+        self.settings_button = ttk.Button(left_frame, text="Settings", command=self.open_settings)
+        self.settings_button.pack(pady=10)
 
         self.base = None
         self.refiner = None
@@ -155,11 +166,7 @@ class StableDiffusionGUI:
         self.reference_images = []
 
     def load_models(self):
-        """
-        Loads the Stable Diffusion models.
-
-        Loads the base model and refiner model into memory.
-        """
+        """Loads the Stable Diffusion models into memory."""
         self.status_label.config(text="Loading models...")
         self.master.update()
 
@@ -176,12 +183,7 @@ class StableDiffusionGUI:
         self.status_label.config(text="Models loaded successfully!")
 
     def add_reference_image(self):
-        """
-        Adds a reference image to the GUI.
-
-        Opens a file dialog to select an image file and then
-        displays it in the reference image frame.
-        """
+        """Adds a reference image to the GUI."""
         file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
         if file_path:
             original_image = Image.open(file_path).convert("RGB")
@@ -193,11 +195,7 @@ class StableDiffusionGUI:
                 self.status_label.config(text=f"{len(self.reference_images)} reference image(s) selected.")
 
     def display_reference_images(self):
-        """
-        Displays the reference images in the reference image frame.
-
-        Clears the frame and adds new labels for each reference image.
-        """
+        """Displays the reference images in the reference image frame."""
         for widget in self.reference_frame.winfo_children():
             widget.destroy()
 
@@ -219,15 +217,10 @@ class StableDiffusionGUI:
             photo = ImageTk.PhotoImage(img_resized)
             label = ttk.Label(inner_frame, image=photo)
             label.image = photo
-            label.grid(row=i//3, column=i%3, padx=5, pady=5)
+            label.grid(row=i // 3, column=i % 3, padx=5, pady=5)
 
     def generate_image(self):
-        """
-        Generates an image based on the prompt and reference images.
-
-        If the models are not loaded, loads them first.
-        Then generates the image using the base model and refiner model.
-        """
+        """Generates an image based on the prompt and reference images."""
         if not self.base or not self.refiner:
             self.load_models()
 
@@ -244,15 +237,15 @@ class StableDiffusionGUI:
         self.master.update()
 
         def generate():
-            n_steps = 40
-            high_noise_frac = 0.8
-
+            """Thread function to generate the image."""
             def base_callback(step, timestep, latents):
-                progress = (step / n_steps) * 100 * high_noise_frac
+                """Callback for the base model."""
+                progress = (step / imageSettings.num_inference_steps) * 100 * imageSettings.high_noise_frac
                 self.master.after(0, self.update_progress, progress)
 
             def refiner_callback(step, timestep, latents):
-                progress = 100 * high_noise_frac + (step / n_steps) * 100 * (1 - high_noise_frac)
+                """Callback for the refiner model."""
+                progress = 100 * imageSettings.high_noise_frac + (step / imageSettings.num_inference_steps) * 100 * (1 - imageSettings.high_noise_frac)
                 self.master.after(0, self.update_progress, progress)
 
             if self.reference_images:
@@ -263,19 +256,19 @@ class StableDiffusionGUI:
 
             latents = self.base(
                 prompt=prompt,
-                num_inference_steps=n_steps,
-                denoising_end=high_noise_frac,
+                num_inference_steps=imageSettings.num_inference_steps,
+                denoising_end=imageSettings.high_noise_frac,
                 output_type="latent",
                 callback=base_callback,
                 callback_steps=1,
                 image=reference,
-                strength=0.7  # Adjust this value to control the influence of the reference image
+                strength=imageSettings.referance_strength
             ).images
 
             images = self.refiner(
                 prompt=prompt,
-                num_inference_steps=n_steps,
-                denoising_start=high_noise_frac,
+                num_inference_steps=imageSettings.num_inference_steps,
+                denoising_start=imageSettings.high_noise_frac,
                 image=latents,
                 callback=refiner_callback,
                 callback_steps=1
@@ -287,21 +280,13 @@ class StableDiffusionGUI:
         threading.Thread(target=generate, daemon=True).start()
 
     def update_progress(self, progress):
-        """
-        Updates the progress bar and label.
-
-        Called by the generate function to update the progress bar and label.
-        """
+        """Updates the progress bar and label."""
         self.progress_bar['value'] = progress
         self.progress_label.config(text=f"{progress:.1f}%")
         self.master.update_idletasks()
 
     def update_gui(self):
-        """
-        Updates the GUI with the generated image.
-
-        Called by the generate function to update the GUI with the generated image.
-        """
+        """Updates the GUI with the generated image."""
         self.display_image(self.generated_image, self.image_label)
         self.status_label.config(text="Image generated successfully!")
         self.generate_button.config(state=tk.NORMAL)
@@ -310,22 +295,14 @@ class StableDiffusionGUI:
         self.progress_label.config(text="100%")
 
     def display_image(self, image, label):
-        """
-        Displays an image in a label.
-
-        Called by the update_gui function to display the generated image.
-        """
-        image = image.resize((400, 400))  # Increased size for the generated image
+        """Displays an image in a label."""
+        image = image.resize((400, 400))
         photo = ImageTk.PhotoImage(image)
         label.config(image=photo)
         label.image = photo
 
     def save_image(self):
-        """
-        Saves the generated image to a file.
-
-        Opens a file dialog to select a file and then saves the image to that file.
-        """
+        """Saves the generated image to a file."""
         if self.generated_image:
             file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
             if file_path:
@@ -334,7 +311,8 @@ class StableDiffusionGUI:
         else:
             self.status_label.config(text="No image to save.")
 
-
-root = tk.Tk()
-app = StableDiffusionGUI(root)
-root.mainloop()
+# Main application entry point
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StableDiffusionGUI(root)
+    root.mainloop()
